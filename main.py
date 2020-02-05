@@ -31,11 +31,12 @@ class Car:
 
         self.velocity = Vector2(0.0, 0.0)
         self.acceleration = 0.0
+
         self.angle = 0.0
         self.steering = 0.0
 
-        self.length = 4
-        self.max_velocity = 5
+        self.length = 30
+        self.max_velocity = 10
         self.max_acceleration = 5.0
         self.max_steering = 50
 
@@ -51,11 +52,10 @@ class Car:
         self.canvas.delete(self.car)
         self.canvas.delete("center")
         self.canvas.delete("arrow")
+        self.canvas.delete("real_car")
 
-        center = Vector2(
-            (self.upper_left_corner.x + self.bottom_right_corner.x) / 2,
-            (self.upper_left_corner.y + self.bottom_right_corner.y) / 2
-        )
+        center = self.get_center_coordinates()
+        coordinates = self.get_coordinates_as_list()
 
         rotated_positions = self.rotate(
             [
@@ -68,16 +68,25 @@ class Car:
             (center.x, center.y)
         )
 
-        # print(self.upper_right_corner)
-        # print(self.upper_left_corner)
+        # WARNING : si on met à jour la position 'pivotée' ça fout la merde au moment de l'ajout de la vélocité
+        # en fait la rotation doit simplement d'appliquer à la fin 'à l'affichage' avec l'angle calculée
+        # pour ne pas foutre la merde
+        # self.update_coordinates(new_positions)
 
+        # Dessin de la voiture
         self.car = self.canvas.create_polygon(rotated_positions, fill='green')
 
+        # real_car = self.canvas.create_polygon(coordinates, outline='red', fill='')
+        # self.canvas.itemconfig(real_car, tags="real_car")
+
+        # Dessin du centre de la voiture
         center_point = self.canvas.create_oval(center.x - 1, center.y - 1, center.x, center.y, fill='#FF0000')
         self.canvas.itemconfig(center_point, tags="center")
+
+        # Dessin de la flèche de direction
         arrow = self.canvas.create_line(center.x, center.y,
-                                        (self.upper_right_corner.x + self.upper_left_corner.x) / 2,
-                                        (self.upper_right_corner.y + self.upper_left_corner.y) / 2,
+                                        (rotated_positions[1][0] + rotated_positions[0][0]) / 2,
+                                        (rotated_positions[1][1] + rotated_positions[0][1]) / 2,
                                         arrow=tk.LAST)
         self.canvas.itemconfig(arrow, tags="arrow")
 
@@ -90,14 +99,20 @@ class Car:
         self.velocity += (0, self.acceleration * dt)
         self.velocity.y = max(-self.max_velocity, min(self.velocity.y, self.max_velocity))
 
+        if self.steering:
+            turning_radius = self.length / sin(radians(self.steering))
+            angular_velocity = self.velocity.y / turning_radius
+        else:
+            angular_velocity = 0
 
-
-
-        # TODO trouver comment update les positions quand on tourne
         self.upper_left_corner += self.velocity.rotate(self.angle) * dt
         self.upper_right_corner += self.velocity.rotate(self.angle) * dt
         self.bottom_left_corner += self.velocity.rotate(self.angle) * dt
         self.bottom_right_corner += self.velocity.rotate(self.angle) * dt
+
+        self.angle += degrees(angular_velocity) * dt
+        self.steering = 0
+
         self.canvas.after(delay, self.move)
 
     def up(self, event):
@@ -106,6 +121,7 @@ class Car:
             self.acceleration = self.brake_deceleration
         else:
             self.acceleration -= 1 * dt
+        # self.acceleration = max(-self.max_acceleration, min(self.acceleration, self.max_acceleration))
 
     def down(self, event):
         # self.acceleration = 1 * dt
@@ -113,12 +129,15 @@ class Car:
             self.acceleration = -self.brake_deceleration
         else:
             self.acceleration += 1 * dt
+        # self.acceleration = max(-self.max_acceleration, min(self.acceleration, self.max_acceleration))
 
     def turn_left(self, event):
-        self.angle -= 4
+        self.steering += 100
+        # self.steering = max(-self.max_steering, min(self.steering, self.max_steering))
 
     def turn_right(self, event):
-        self.angle += 4
+        self.steering -= 100
+        # self.steering = max(-self.max_steering, min(self.steering, self.max_steering))
 
     def stop(self, event):
         self.acceleration = 0
@@ -132,6 +151,7 @@ class Car:
         self.bottom_right_corner = Vector2(115, 130)
         self.velocity.x = 0
         self.velocity.y = 0
+        self.steering = 0
         self.angle = 0
         self.acceleration = 0
 
@@ -148,6 +168,26 @@ class Car:
             y_new = x_old * sin_val + y_old * cos_val
             new_points.append([x_new + cx, y_new + cy])
         return new_points
+
+    def get_coordinates_as_list(self):
+        return [
+            [self.upper_left_corner.x, self.upper_left_corner.y],
+            [self.upper_right_corner.x, self.upper_right_corner.y],
+            [self.bottom_right_corner.x, self.bottom_right_corner.y],
+            [self.bottom_left_corner.x, self.bottom_left_corner.y]
+        ]
+
+    def get_center_coordinates(self):
+        return Vector2(
+            (self.upper_left_corner.x + self.bottom_right_corner.x) / 2,
+            (self.upper_left_corner.y + self.bottom_right_corner.y) / 2
+        )
+
+    def update_coordinates(self, new_positions):
+        self.upper_left_corner = Vector2(new_positions[0][0], new_positions[0][1])
+        self.upper_right_corner = Vector2(new_positions[1][0], new_positions[1][1])
+        self.bottom_right_corner = Vector2(new_positions[2][0], new_positions[2][1])
+        self.bottom_left_corner = Vector2(new_positions[3][0], new_positions[3][1])
 
 
 class ApplicationBasic:
