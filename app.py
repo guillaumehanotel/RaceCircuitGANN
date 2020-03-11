@@ -2,6 +2,7 @@ from tkinter import *
 from utils import *
 from datetime import datetime
 from car import Car
+from shapely.geometry import LineString, Point
 
 saves_dir = './saves'
 now = datetime.now()
@@ -23,7 +24,7 @@ class App:
 
     def setup_window(self):
         width = 800
-        height = 950
+        height = 650
         x = (self.window.winfo_screenwidth() / 2) - (width / 2)
         y = (self.window.winfo_screenheight() / 2) - (height / 2)
         if self.window.winfo_screenwidth() == 1920:
@@ -72,13 +73,14 @@ class App:
     def reset(self):
         self.car.reset()
 
-    def run(self):
-        circuit01_path = "./saves/circuit01.txt"
-        if os.path.exists(circuit01_path):
-            self.draw_from_file(circuit01_path)
+    def run(self, creative_mode=False):
+        if creative_mode is False:
+            circuit01_path = "./saves/circuit01.txt"
+            if os.path.exists(circuit01_path):
+                self.draw_from_file(circuit01_path)
 
-        self.car.draw()
-        self.car.move()
+            self.car.draw()
+            self.car.move()
         self.window.mainloop()
 
     def active_drawing_mode(self):
@@ -124,10 +126,26 @@ class App:
         if self.is_drawing_mode and self.is_drawing_line:
             self.canvas.delete("temporary")
             self.is_drawing_line = False
-            line = self.canvas.create_line(self.line_start_x, self.line_start_y, event.x, event.y, width=3,
-                                           fill="#A9ACAB")
-            self.canvas.itemconfig(line, tags="circuit")
+            line_coord = self.line_start_x, self.line_start_y, event.x, event.y
+            line = self.canvas.create_line(*line_coord, width=3, fill="#A9ACAB")
+            self.canvas.itemconfig(line, tags="line")
+
+            existing_lines = list(self.canvas.find_withtag("line"))
+            existing_lines.pop()
+
+            for existing_line in existing_lines:
+                existing_line_coord = self.canvas.coords(existing_line)
+                line1 = LineString([(line_coord[0], line_coord[1]), (line_coord[2], line_coord[3])])
+                line2 = LineString([(existing_line_coord[0], existing_line_coord[1]), (existing_line_coord[2], existing_line_coord[3])])
+                intersection_point = line1.intersection(line2)
+                if isinstance(intersection_point, Point):
+                    self.draw_point([intersection_point.x, intersection_point.y])
+
+            # self.canvas.itemconfig(line, tags="circuit")
             self.forms.append(line)
+
+    def draw_point(self, point):
+        self.canvas.create_oval(point[0] - 3, point[1] - 3, point[0], point[1], outline='red', fill='red')
 
     def save_positions(self):
         if len(self.forms) == 0:
@@ -148,11 +166,9 @@ class App:
             for line in file:
                 coords = line.replace(" ", "").rstrip().split(",")
                 line_form = self.canvas.create_line(coords[0], coords[1], coords[2], coords[3], width=3, fill="#A9ACAB")
-                self.canvas.itemconfig(line_form, tags=("circuit"))
+                self.canvas.itemconfig(line_form, tags="circuit")
                 self.forms.append(line_form)
 
     def erase(self):
         self.canvas.delete("circuit")
         self.forms = []
-
-
