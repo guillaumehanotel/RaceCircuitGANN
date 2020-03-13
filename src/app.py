@@ -1,10 +1,12 @@
 from tkinter import *
-from utils import *
+from src.utils import *
 from datetime import datetime
-from car import Car
+from src.car import Car
 from shapely.geometry import LineString, Point
+import os
 
-saves_dir = './saves'
+ROOT_DIR = os.path.abspath(os.curdir)
+saves_dir = ROOT_DIR + '/saves'
 now = datetime.now()
 
 
@@ -42,31 +44,32 @@ class App:
         self.window.bind("<KeyPress-Down>", self.car.down)
         self.window.bind("<KeyPress-Left>", self.car.turn_left)
         self.window.bind("<KeyPress-Right>", self.car.turn_right)
+        self.window.bind("<space>", self.car.stop)
         self.canvas.pack(side=BOTTOM)
 
     def setup_window_components(self):
         self.draw_line_btn = Button(self.window)
-        self.draw_line_img = PhotoImage(file="assets/draw_line.png")
+        self.draw_line_img = PhotoImage(file=ROOT_DIR + "/assets/draw_line.png")
         self.draw_line_btn.config(image=self.draw_line_img, command=self.active_drawing_mode)
         self.draw_line_btn.pack(side=LEFT)
 
         self.open_btn = Button(self.window)
-        self.open_img = PhotoImage(file="assets/open.png")
+        self.open_img = PhotoImage(file=ROOT_DIR + "/assets/open.png")
         self.open_btn.config(image=self.open_img, command=self.choose_and_draw_from_file)
         self.open_btn.pack(side=LEFT)
 
         self.save_btn = Button(self.window)
-        self.save_img = PhotoImage(file="assets/save.png")
+        self.save_img = PhotoImage(file=ROOT_DIR + "/assets/save.png")
         self.save_btn.config(image=self.save_img, command=self.save_positions)
         self.save_btn.pack(side=LEFT)
 
         self.erase_btn = Button(self.window)
-        self.erase_img = PhotoImage(file="assets/erase.png")
+        self.erase_img = PhotoImage(file=ROOT_DIR + "/assets/erase.png")
         self.erase_btn.config(image=self.erase_img, command=self.erase)
         self.erase_btn.pack(side=LEFT)
 
         self.reset_btn = Button(self.window)
-        self.reset_img = PhotoImage(file="assets/reset.png")
+        self.reset_img = PhotoImage(file=ROOT_DIR + "/assets/reset.png")
         self.reset_btn.config(image=self.reset_img, command=self.reset)
         self.reset_btn.pack(side=LEFT)
 
@@ -75,7 +78,7 @@ class App:
 
     def run(self, creative_mode=False):
         if creative_mode is False:
-            circuit01_path = "./saves/circuit01.txt"
+            circuit01_path = ROOT_DIR + "/saves/circuit01.txt"
             if os.path.exists(circuit01_path):
                 self.draw_from_file(circuit01_path)
 
@@ -128,11 +131,10 @@ class App:
             self.is_drawing_line = False
             line_coord = self.line_start_x, self.line_start_y, event.x, event.y
             line = self.canvas.create_line(*line_coord, width=3, fill="#A9ACAB")
-            self.canvas.itemconfig(line, tags="line")
 
-            existing_lines = list(self.canvas.find_withtag("line"))
+            # ----------
+            existing_lines = list(self.canvas.find_withtag("circuit"))
             existing_lines.pop()
-
             for existing_line in existing_lines:
                 existing_line_coord = self.canvas.coords(existing_line)
                 line1 = LineString([(line_coord[0], line_coord[1]), (line_coord[2], line_coord[3])])
@@ -140,8 +142,9 @@ class App:
                 intersection_point = line1.intersection(line2)
                 if isinstance(intersection_point, Point):
                     self.draw_point([intersection_point.x, intersection_point.y])
+            # ----------
 
-            # self.canvas.itemconfig(line, tags="circuit")
+            self.canvas.itemconfig(line, tags="circuit")
             self.forms.append(line)
 
     def draw_point(self, point):

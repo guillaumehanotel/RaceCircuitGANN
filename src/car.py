@@ -1,9 +1,11 @@
 import tkinter as tk
-from math import sin, radians, degrees, copysign
+from math import sin, radians, degrees
 from pygame.math import Vector2
 import math
 
 # Les fonctions move et show sont réappelés toutes les 20ms
+from src.utils import get_equation_line
+
 delay = 20
 # Sert pour les calculs de changement de position
 dt = 0.2
@@ -69,38 +71,79 @@ class Car:
 
         # Récupère la nouvelle position pivotée
         rotated_positions = self.rotate([
-                self.upper_left_corner,
-                self.upper_right_corner,
-                self.bottom_right_corner,
-                self.bottom_left_corner,
-            ], self.angle, (center.x, center.y)
-        )
+            self.upper_left_corner,
+            self.upper_right_corner,
+            self.bottom_right_corner,
+            self.bottom_left_corner,
+        ], self.angle, (center.x, center.y))
 
         # Met à jour la position pivotée
         self.update_rotated_coordinates(rotated_positions)
 
         # Dessin de la voiture
         self.car = self.canvas.create_polygon(rotated_positions, outline='green', fill='')
-        self.draw_real_car()
+        # self.draw_real_car()
         self.draw_center(center)
         self.draw_direction_arrow(center, rotated_positions)
+        self.draw_radar_lines(center, rotated_positions)
 
         self.canvas.after(delay, self.draw)
+
+    def draw_radar_lines(self, center, rotated_positions):
+        car_length_coord = center.x, center.y, \
+                           (rotated_positions[1][0] + rotated_positions[0][0]) / 2, \
+                           (rotated_positions[1][1] + rotated_positions[0][1]) / 2
+        car_length_equation_line = get_equation_line(*car_length_coord)
+
+        car_width_coord = center.x, center.y, \
+                          (rotated_positions[2][0] + rotated_positions[1][0]) / 2, \
+                          (rotated_positions[2][1] + rotated_positions[1][1]) / 2
+        car_width_equation_line = get_equation_line(*car_width_coord)
+
+        self.draw_center_radar_line(center, car_length_equation_line)
+        self.draw_left_radar_line(center, car_width_equation_line)
+        self.draw_right_radar_line(center, car_width_equation_line)
+
+
+    def draw_center_radar_line(self, center, car_equation_line):
+        x = 0
+        if 0 <= self.angle < 180:
+            x = self.canvas.winfo_width()
+        y = x * car_equation_line[0] + car_equation_line[1]
+
+        line = self.canvas.create_line(center.x, center.y, x, y)
+        self.canvas.itemconfig(line, tags="radar_line")
+
+    def draw_left_radar_line(self, center, car_equation_line):
+        x = 0
+        if 90 <= self.angle < 270:
+            x = self.canvas.winfo_width()
+        y = x * car_equation_line[0] + car_equation_line[1]
+        line = self.canvas.create_line(center.x, center.y, x, y)
+        self.canvas.itemconfig(line, tags="radar_line")
+
+    def draw_right_radar_line(self, center, car_equation_line):
+        x = self.canvas.winfo_width()
+        if 90 <= self.angle < 270:
+            x = 0
+        y = x * car_equation_line[0] + car_equation_line[1]
+        line = self.canvas.create_line(center.x, center.y, x, y)
+        self.canvas.itemconfig(line, tags="radar_line")
 
     def erase_old_forms(self):
         self.canvas.delete(self.car)
         self.canvas.delete("center")
         self.canvas.delete("arrow")
         self.canvas.delete("real_car")
+        self.canvas.delete("radar_line")
 
     def draw_direction_arrow(self, center, rotated_positions):
         """
         Dessin de la flèche de direction
         """
-        arrow = self.canvas.create_line(center.x, center.y,
-                                        (rotated_positions[1][0] + rotated_positions[0][0]) / 2,
-                                        (rotated_positions[1][1] + rotated_positions[0][1]) / 2,
-                                        arrow=tk.LAST)
+        arrow_coord = center.x, center.y, (rotated_positions[1][0] + rotated_positions[0][0]) / 2, (
+                rotated_positions[1][1] + rotated_positions[0][1]) / 2
+        arrow = self.canvas.create_line(*arrow_coord, arrow=tk.LAST)
         self.canvas.itemconfig(arrow, tags="arrow")
 
     def draw_real_car(self):
@@ -137,6 +180,10 @@ class Car:
         self.bottom_right_corner += self.velocity.rotate(self.angle) * dt
 
         self.angle += degrees(angular_velocity) * dt
+        if self.angle > 360:
+            self.angle = self.angle - 360
+        elif self.angle < 0:
+            self.angle = 360 - (-self.angle)
         self.steering = 0
 
         self.canvas.after(delay, self.move)
@@ -156,6 +203,10 @@ class Car:
     def turn_right(self, event):
         self.steering -= 100
         self.steering = max(-self.max_steering, min(self.steering, self.max_steering))
+
+    def stop(self, event):
+        self.velocity.y = 0
+        self.acceleration = 0
 
     def stop(self, event):
         self.acceleration = 0

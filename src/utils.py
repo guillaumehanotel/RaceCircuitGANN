@@ -46,3 +46,12 @@ def intersect(line1, line2):
     C = line2[0]
     D = line2[1]
     return ccw(A, C, D) != ccw(B, C, D) and ccw(A, B, C) != ccw(A, B, D)
+
+
+def get_equation_line(ax, ay, bx, by):
+    points = [(ax, ay), (bx, by)]
+    x_coords, y_coords = zip(*points)
+    A = vstack([x_coords, ones(len(x_coords))]).T
+    m, c = lstsq(A, y_coords, rcond=-1)[0]
+    # print("y = {m}x + {c}".format(m=round(m, 2), c=round(c, 2)))
+    return [round(m, 2), round(c, 2)]
