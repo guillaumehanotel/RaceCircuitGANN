@@ -131,20 +131,7 @@ class App:
             self.is_drawing_line = False
             line_coord = self.line_start_x, self.line_start_y, event.x, event.y
             line = self.canvas.create_line(*line_coord, width=3, fill="#A9ACAB")
-
-            # ----------
-            existing_lines = list(self.canvas.find_withtag("circuit"))
-            existing_lines.pop()
-            for existing_line in existing_lines:
-                existing_line_coord = self.canvas.coords(existing_line)
-                line1 = LineString([(line_coord[0], line_coord[1]), (line_coord[2], line_coord[3])])
-                line2 = LineString([(existing_line_coord[0], existing_line_coord[1]), (existing_line_coord[2], existing_line_coord[3])])
-                intersection_point = line1.intersection(line2)
-                if isinstance(intersection_point, Point):
-                    self.draw_point([intersection_point.x, intersection_point.y])
-            # ----------
-
-            self.canvas.itemconfig(line, tags="circuit")
+            self.canvas.itemconfig(line, tags="track_segment")
             self.forms.append(line)
 
     def draw_point(self, point):
@@ -169,9 +156,9 @@ class App:
             for line in file:
                 coords = line.replace(" ", "").rstrip().split(",")
                 line_form = self.canvas.create_line(coords[0], coords[1], coords[2], coords[3], width=3, fill="#A9ACAB")
-                self.canvas.itemconfig(line_form, tags="circuit")
+                self.canvas.itemconfig(line_form, tags="track_segment")
                 self.forms.append(line_form)
 
     def erase(self):
-        self.canvas.delete("circuit")
+        self.canvas.delete("track_segment")
         self.forms = []

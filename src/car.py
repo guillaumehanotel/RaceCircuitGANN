@@ -4,7 +4,7 @@ from pygame.math import Vector2
 import math
 
 # Les fonctions move et show sont réappelés toutes les 20ms
-from src.utils import get_equation_line
+from src.utils import get_equation_line, get_segments_intersection_point
 
 delay = 20
 # Sert pour les calculs de changement de position
@@ -41,7 +41,7 @@ class Car:
         self.angle = 0.0
 
         # La vélocité est limitée pour ne pas dépasser une certaine vitesse
-        self.max_velocity = 12
+        self.max_velocity = 20
         # L'accélération est aussi limitée pour ne pas avoir une montée en vitesse trop rapide
         self.max_acceleration = 5.0
         # La direction des roues a aussi une limite -> plus c'est élevé, plus on peut pivoter "rapidement"
@@ -82,12 +82,31 @@ class Car:
 
         # Dessin de la voiture
         self.car = self.canvas.create_polygon(rotated_positions, outline='green', fill='')
-        # self.draw_real_car()
+        self.draw_track_intersection_with_car_points(rotated_positions)
         self.draw_center(center)
         self.draw_direction_arrow(center)
         self.draw_radar_lines(center)
 
         self.canvas.after(delay, self.draw)
+
+    def draw_track_intersection_with_car_points(self, car_corner_positions):
+        front_car_segment = [car_corner_positions[0][0], car_corner_positions[0][1], car_corner_positions[1][0], car_corner_positions[1][1]]
+        right_car_segment = [car_corner_positions[1][0], car_corner_positions[1][1], car_corner_positions[2][0], car_corner_positions[2][1]]
+        back_car_segment = [car_corner_positions[2][0], car_corner_positions[2][1], car_corner_positions[3][0], car_corner_positions[3][1]]
+        left_car_segment = [car_corner_positions[3][0], car_corner_positions[3][1], car_corner_positions[0][0], car_corner_positions[0][1]]
+        self.draw_track_intersection_points(front_car_segment)
+        self.draw_track_intersection_points(right_car_segment)
+        self.draw_track_intersection_points(back_car_segment)
+        self.draw_track_intersection_points(left_car_segment)
+
+    def draw_track_intersection_points(self, line_coord):
+        track_segments_ids = list(self.canvas.find_withtag("track_segment"))
+        for track_segment_id in track_segments_ids:
+            track_segment_coord = self.canvas.coords(track_segment_id)
+            intersection_point = get_segments_intersection_point(line_coord, track_segment_coord)
+            if intersection_point:
+                point = self.draw_point([intersection_point[0], intersection_point[1]])
+                self.canvas.itemconfig(point, tags="track_intersection")
 
     def draw_radar_lines(self, center):
 
@@ -112,8 +131,10 @@ class Car:
             x = self.canvas.winfo_width()
         y = x * car_equation_line[0] + car_equation_line[1]
 
-        line = self.canvas.create_line(center.x, center.y, x, y)
+        line_coord = center.x, center.y, x, y
+        line = self.canvas.create_line(*line_coord)
         self.canvas.itemconfig(line, tags="radar_line")
+        self.draw_track_intersection_points(line_coord)
 
     def draw_right_diagonal_radar_line(self, center):
         rotated_diagonal_point = self.rotate([Vector2(center.x + (self.length / 2), self.upper_left_corner.y)], self.angle, center)
@@ -125,8 +146,10 @@ class Car:
             x = 0
         y = x * car_equation_line[0] + car_equation_line[1]
 
-        line = self.canvas.create_line(center.x, center.y, x, y)
+        line_coord = center.x, center.y, x, y
+        line = self.canvas.create_line(*line_coord)
         self.canvas.itemconfig(line, tags="radar_line")
+        self.draw_track_intersection_points(line_coord)
 
     def draw_center_radar_line(self, center):
         car_length_coord = center.x, center.y, \
@@ -139,24 +162,30 @@ class Car:
             x = self.canvas.winfo_width()
         y = x * car_equation_line[0] + car_equation_line[1]
 
-        line = self.canvas.create_line(center.x, center.y, x, y)
+        line_coord = center.x, center.y, x, y
+        line = self.canvas.create_line(*line_coord)
         self.canvas.itemconfig(line, tags="radar_line")
+        self.draw_track_intersection_points(line_coord)
 
     def draw_left_radar_line(self, center, car_equation_line):
         x = 0
         if 90 <= self.angle < 270:
             x = self.canvas.winfo_width()
         y = x * car_equation_line[0] + car_equation_line[1]
-        line = self.canvas.create_line(center.x, center.y, x, y)
+        line_coord = center.x, center.y, x, y
+        line = self.canvas.create_line(*line_coord)
         self.canvas.itemconfig(line, tags="radar_line")
+        self.draw_track_intersection_points(line_coord)
 
     def draw_right_radar_line(self, center, car_equation_line):
         x = self.canvas.winfo_width()
         if 90 <= self.angle < 270:
             x = 0
         y = x * car_equation_line[0] + car_equation_line[1]
-        line = self.canvas.create_line(center.x, center.y, x, y)
+        line_coord = center.x, center.y, x, y
+        line = self.canvas.create_line(*line_coord)
         self.canvas.itemconfig(line, tags="radar_line")
+        self.draw_track_intersection_points(line_coord)
 
     def erase_old_forms(self):
         self.canvas.delete(self.car)
@@ -164,6 +193,7 @@ class Car:
         self.canvas.delete("arrow")
         self.canvas.delete("real_car")
         self.canvas.delete("radar_line")
+        self.canvas.delete("track_intersection")
 
     def draw_direction_arrow(self, center):
         """
@@ -189,6 +219,9 @@ class Car:
         center_point = self.canvas.create_oval(center.x - 1, center.y - 1, center.x, center.y, fill='#FFFF00')
         self.canvas.itemconfig(center_point, tags="center")
 
+    def draw_point(self, point):
+        return self.canvas.create_oval(point[0] - 3, point[1] - 3, point[0], point[1], outline='red', fill='red')
+
     def move(self):
         """
         Fonction permettant de mettre à jour la position de la voiture en fonction de sa vélocité et de son accélération
@@ -211,10 +244,12 @@ class Car:
         self.bottom_right_corner += self.velocity.rotate(self.angle) * dt
 
         self.angle += degrees(angular_velocity) * dt
+        # On ramène l'angle à une valeure entre 0 et 360
         if self.angle > 360:
             self.angle = self.angle - 360
         elif self.angle < 0:
             self.angle = 360 - (-self.angle)
+
         self.steering = 0
 
         self.canvas.after(delay, self.move)
@@ -228,8 +263,8 @@ class Car:
         return False
 
     def is_position_out_of_bound(self, coord):
-        if coord[0] < 0 or coord[0] > self.canvas.winfo_width() or coord[1] < 0 or coord[
-            1] > self.canvas.winfo_height():
+        if coord[0] < 0 or coord[0] > self.canvas.winfo_width() or \
+                coord[1] < 0 or coord[1] > self.canvas.winfo_height():
             return True
         return False
 

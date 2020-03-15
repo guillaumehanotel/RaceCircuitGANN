@@ -2,6 +2,7 @@ import os
 from tkinter import filedialog
 from numpy import ones, vstack
 from numpy.linalg import lstsq
+from shapely.geometry import LineString, Point
 
 
 def create_directory_if_needed(directory_path):
@@ -55,3 +56,14 @@ def get_equation_line(ax, ay, bx, by):
     m, c = lstsq(A, y_coords, rcond=-1)[0]
     # print("y = {m}x + {c}".format(m=round(m, 2), c=round(c, 2)))
     return [round(m, 2), round(c, 2)]
+
+
+def get_segments_intersection_point(segment1, segment2):
+    line1 = LineString([(segment1[0], segment1[1]), (segment1[2], segment1[3])])
+    line2 = LineString([(segment2[0], segment2[1]), (segment2[2], segment2[3])])
+    intersection_point = line1.intersection(line2)
+    if isinstance(intersection_point, Point):
+        return [intersection_point.x, intersection_point.y]
+    else:
+        return False
+
