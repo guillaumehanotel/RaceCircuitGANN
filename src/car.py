@@ -84,28 +84,56 @@ class Car:
         self.car = self.canvas.create_polygon(rotated_positions, outline='green', fill='')
         # self.draw_real_car()
         self.draw_center(center)
-        self.draw_direction_arrow(center, rotated_positions)
-        self.draw_radar_lines(center, rotated_positions)
+        self.draw_direction_arrow(center)
+        self.draw_radar_lines(center)
 
         self.canvas.after(delay, self.draw)
 
-    def draw_radar_lines(self, center, rotated_positions):
-        car_length_coord = center.x, center.y, \
-                           (rotated_positions[1][0] + rotated_positions[0][0]) / 2, \
-                           (rotated_positions[1][1] + rotated_positions[0][1]) / 2
-        car_length_equation_line = get_equation_line(*car_length_coord)
+    def draw_radar_lines(self, center):
 
         car_width_coord = center.x, center.y, \
-                          (rotated_positions[2][0] + rotated_positions[1][0]) / 2, \
-                          (rotated_positions[2][1] + rotated_positions[1][1]) / 2
+                          (self.rotated_bottom_right_corner.x + self.rotated_upper_right_corner.x) / 2, \
+                          (self.rotated_bottom_right_corner.y + self.rotated_upper_right_corner.y) / 2
         car_width_equation_line = get_equation_line(*car_width_coord)
 
-        self.draw_center_radar_line(center, car_length_equation_line)
+        self.draw_center_radar_line(center)
         self.draw_left_radar_line(center, car_width_equation_line)
         self.draw_right_radar_line(center, car_width_equation_line)
+        self.draw_right_diagonal_radar_line(center)
+        self.draw_left_diagonal_radar_line(center)
 
+    def draw_left_diagonal_radar_line(self, center):
+        rotated_diagonal_point = self.rotate([Vector2(center.x - (self.length / 2), self.upper_left_corner.y)], self.angle, center)
+        car_left_diagonal_coord = center.x, center.y, rotated_diagonal_point[0][0], rotated_diagonal_point[0][1]
+        car_equation_line = get_equation_line(*car_left_diagonal_coord)
 
-    def draw_center_radar_line(self, center, car_equation_line):
+        x = 0
+        if 45 <= self.angle < 225:
+            x = self.canvas.winfo_width()
+        y = x * car_equation_line[0] + car_equation_line[1]
+
+        line = self.canvas.create_line(center.x, center.y, x, y)
+        self.canvas.itemconfig(line, tags="radar_line")
+
+    def draw_right_diagonal_radar_line(self, center):
+        rotated_diagonal_point = self.rotate([Vector2(center.x + (self.length / 2), self.upper_left_corner.y)], self.angle, center)
+        car_right_diagonal_coord = center.x, center.y, rotated_diagonal_point[0][0], rotated_diagonal_point[0][1]
+        car_equation_line = get_equation_line(*car_right_diagonal_coord)
+
+        x = self.canvas.winfo_width()
+        if 135 <= self.angle < 315:
+            x = 0
+        y = x * car_equation_line[0] + car_equation_line[1]
+
+        line = self.canvas.create_line(center.x, center.y, x, y)
+        self.canvas.itemconfig(line, tags="radar_line")
+
+    def draw_center_radar_line(self, center):
+        car_length_coord = center.x, center.y, \
+                           (self.rotated_upper_left_corner.x + self.rotated_upper_right_corner.x) / 2, \
+                           (self.rotated_upper_left_corner.y + self.rotated_upper_right_corner.y) / 2
+        car_equation_line = get_equation_line(*car_length_coord)
+
         x = 0
         if 0 <= self.angle < 180:
             x = self.canvas.winfo_width()
@@ -137,12 +165,12 @@ class Car:
         self.canvas.delete("real_car")
         self.canvas.delete("radar_line")
 
-    def draw_direction_arrow(self, center, rotated_positions):
+    def draw_direction_arrow(self, center):
         """
         Dessin de la flèche de direction
         """
-        arrow_coord = center.x, center.y, (rotated_positions[1][0] + rotated_positions[0][0]) / 2, (
-                rotated_positions[1][1] + rotated_positions[0][1]) / 2
+        arrow_coord = center.x, center.y, (self.rotated_upper_left_corner.x + self.rotated_upper_right_corner.x) / 2, \
+                      (self.rotated_upper_left_corner.y + self.rotated_upper_right_corner.y) / 2
         arrow = self.canvas.create_line(*arrow_coord, arrow=tk.LAST)
         self.canvas.itemconfig(arrow, tags="arrow")
 
@@ -174,6 +202,9 @@ class Car:
         else:
             angular_velocity = 0
 
+        if self.has_reach_limit():
+            self.velocity = self.velocity * -20
+
         self.upper_left_corner += self.velocity.rotate(self.angle) * dt
         self.upper_right_corner += self.velocity.rotate(self.angle) * dt
         self.bottom_left_corner += self.velocity.rotate(self.angle) * dt
@@ -187,6 +218,20 @@ class Car:
         self.steering = 0
 
         self.canvas.after(delay, self.move)
+
+    def has_reach_limit(self):
+        if self.is_position_out_of_bound(self.rotated_bottom_right_corner) or \
+                self.is_position_out_of_bound(self.rotated_bottom_left_corner) or \
+                self.is_position_out_of_bound(self.rotated_upper_right_corner) or \
+                self.is_position_out_of_bound(self.rotated_upper_left_corner):
+            return True
+        return False
+
+    def is_position_out_of_bound(self, coord):
+        if coord[0] < 0 or coord[0] > self.canvas.winfo_width() or coord[1] < 0 or coord[
+            1] > self.canvas.winfo_height():
+            return True
+        return False
 
     def up(self, event):
         self.acceleration -= 1 * dt
@@ -205,13 +250,11 @@ class Car:
         self.steering = max(-self.max_steering, min(self.steering, self.max_steering))
 
     def stop(self, event):
-        self.velocity.y = 0
-        self.acceleration = 0
+        self.stop_car()
 
-    def stop(self, event):
-        self.acceleration = 0
-        self.velocity.x = 0
+    def stop_car(self):
         self.velocity.y = 0
+        self.acceleration = 0
 
     def reset(self):
         self.init_car(self.length, self.width, 200, 200)

@@ -7,9 +7,9 @@ Le réseau de neurone doit prendre en paramètre 5 inputs :
 les 5 distances séparant la voiture de 5 directions devant elle.
 
 
-TODO :
-- arrêter la voiture si elle touche le bord de la fenêtre
-- rajouter les 2 lignes en diagonale
+TODO :  
+- arrêter la voiture si elle touche le bord de la fenêtre -> DONE
+- rajouter les 2 lignes en diagonale -> DONE
 - détecter les points d'intersection entre le radar et le circuit
 - détecter les points d'intersection entre la voiture et le circuit
 - tracer seulement les segments entre la voiture et l'intersection de la voiture et du circuit
