@@ -49,7 +49,7 @@ def intersect(line1, line2):
     return ccw(A, C, D) != ccw(B, C, D) and ccw(A, B, C) != ccw(A, B, D)
 
 
-def get_equation_line(ax, ay, bx, by):
+def get_equation_line_by_segment(ax, ay, bx, by):
     points = [(ax, ay), (bx, by)]
     x_coords, y_coords = zip(*points)
     A = vstack([x_coords, ones(len(x_coords))]).T
