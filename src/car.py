@@ -54,6 +54,8 @@ class Car:
         self.brake_deceleration = 10
         self.free_deceleration = 8
 
+        self.radar_segments = []
+
         # La propriété car correspond à son polygone dans le canvas
         self.car = None
 
@@ -85,9 +87,10 @@ class Car:
         self.bottom_left_corner += self.velocity.rotate(self.angle) * dt
         self.bottom_right_corner += self.velocity.rotate(self.angle) * dt
 
+        self.get_radar_segment()
+
         self.center = self.get_center_coordinates()
         self.angle = self.compute_car_angle()
-
 
         self.canvas.after(delay, self.move)
 
@@ -155,13 +158,14 @@ class Car:
 
     def get_radar_segment(self):
         radar_lines = self.get_radar_lines()
+        self.radar_segments = []
         for radar_line in radar_lines:
             intersection_point = self.get_track_intersection_point_by_radar_line(radar_line)
             if intersection_point:
                 segment_coord = self.center.x, self.center.y, intersection_point[0], intersection_point[1]
-                self.draw_radar_line(segment_coord)
-                point = self.draw_point([intersection_point[0], intersection_point[1]])
-                self.canvas.itemconfig(point, tags="track_intersection")
+                self.radar_segments.append(segment_coord)
+                # point = self.draw_point([intersection_point[0], intersection_point[1]])
+                # self.canvas.itemconfig(point, tags="track_intersection")
 
     def get_track_intersection_point_by_radar_line(self, line_coord):
         closest_intersection_point = None
@@ -305,21 +309,13 @@ class Car:
 
         # Met à jour la position pivotée
         self.update_rotated_coordinates(rotated_positions)
-        # Met
 
         # Dessin de la voiture
         self.car = self.canvas.create_polygon(rotated_positions, outline='green', fill='')
         self.draw_track_intersection_with_car_points(rotated_positions)
         self.draw_center()
         self.draw_direction_arrow()
-
-        # self.draw_radar_lines()
-        self.get_radar_segment()
-
-        # au final, il faudra déporter la logique de récupération des segments radar dans la fonction 'move'
-        # les coordonnées des segments seront enregistrées en tant que propriété
-
-        # et dans la fonction 'draw' -> seulement le dessin des segments et des points
+        self.draw_radar_lines()
 
         self.canvas.after(delay, self.draw)
 
@@ -346,13 +342,9 @@ class Car:
                 point = self.draw_point([intersection_point[0], intersection_point[1]], color)
                 self.canvas.itemconfig(point, tags="track_intersection")
 
-    # TODO DELETE
     def draw_radar_lines(self):
-        radar_directions = [a for a in dir(RadarDirection) if not a.startswith('__')]
-        for radar_direction in radar_directions:
-            line_coord = self.get_radar_line_coord_by_direction(radar_direction)
-            self.draw_radar_line(line_coord)
-            self.draw_track_intersection_points(line_coord)
+        for segment_coord in self.radar_segments:
+            self.draw_radar_line(segment_coord)
 
     def draw_radar_line(self, line_coord):
         line = self.canvas.create_line(*line_coord)
