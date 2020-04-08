@@ -3,14 +3,15 @@ from math import sin, radians, degrees
 from pygame.math import Vector2
 import math
 from src.utils import get_equation_line_by_segment, get_segments_intersection_point
+from mathutils.geometry import intersect_point_line
 
 
 class RadarDirection:
-    CENTER = 0
-    LEFT = 1
-    RIGHT = 2
-    LEFT_DIAGONAL = 3
-    RIGHT_DIAGONAL = 4
+    CENTER = 'CENTER'
+    LEFT = 'LEFT'
+    RIGHT = 'RIGHT'
+    LEFT_DIAGONAL = 'LEFT_DIAGONAL'
+    RIGHT_DIAGONAL = 'RIGHT_DIAGONAL'
 
 
 # Les fonctions move et show sont réappelés toutes les 20ms
@@ -76,7 +77,7 @@ class Car:
         self.velocity += (0, self.acceleration * dt)
         self.velocity.y = max(-self.max_velocity, min(self.velocity.y, self.max_velocity))
 
-        if self.has_reach_limit():
+        if self.has_reach_window_limit():
             self.velocity = self.velocity * -20
 
         self.upper_left_corner += self.velocity.rotate(self.angle) * dt
@@ -86,6 +87,7 @@ class Car:
 
         self.center = self.get_center_coordinates()
         self.angle = self.compute_car_angle()
+
 
         self.canvas.after(delay, self.move)
 
@@ -106,7 +108,7 @@ class Car:
             angle = 360 - (-self.angle)
         return angle
 
-    def has_reach_limit(self):
+    def has_reach_window_limit(self):
         if self.is_position_out_of_bound(self.rotated_bottom_right_corner) or \
                 self.is_position_out_of_bound(self.rotated_bottom_left_corner) or \
                 self.is_position_out_of_bound(self.rotated_upper_right_corner) or \
@@ -119,25 +121,6 @@ class Car:
                 coord[1] < 0 or coord[1] > self.canvas.winfo_height():
             return True
         return False
-
-    def up(self, event):
-        self.acceleration -= 1 * dt
-        self.acceleration = max(-self.max_acceleration, min(self.acceleration, self.max_acceleration))
-
-    def down(self, event):
-        self.acceleration += 1 * dt
-        self.acceleration = max(-self.max_acceleration, min(self.acceleration, self.max_acceleration))
-
-    def turn_left(self, event):
-        self.steering += 100
-        self.steering = max(-self.max_steering, min(self.steering, self.max_steering))
-
-    def turn_right(self, event):
-        self.steering -= 100
-        self.steering = max(-self.max_steering, min(self.steering, self.max_steering))
-
-    def stop(self, event):
-        self.stop_car()
 
     def stop_car(self):
         self.velocity.y = 0
@@ -168,109 +151,49 @@ class Car:
             new_points.append([x_new + cx, y_new + cy])
         return new_points
 
-    def get_coordinates_as_list(self):
-        return [
-            [self.upper_left_corner.x, self.upper_left_corner.y],
-            [self.upper_right_corner.x, self.upper_right_corner.y],
-            [self.bottom_right_corner.x, self.bottom_right_corner.y],
-            [self.bottom_left_corner.x, self.bottom_left_corner.y]
-        ]
+    # =========================== Radar Lines ===========================
 
-    def get_center_coordinates(self):
-        return Vector2(
-            (self.upper_left_corner.x + self.bottom_right_corner.x) / 2,
-            (self.upper_left_corner.y + self.bottom_right_corner.y) / 2
-        )
+    def get_radar_segment(self):
+        radar_lines = self.get_radar_lines()
+        for radar_line in radar_lines:
+            intersection_point = self.get_track_intersection_point_by_radar_line(radar_line)
+            if intersection_point:
+                segment_coord = self.center.x, self.center.y, intersection_point[0], intersection_point[1]
+                self.draw_radar_line(segment_coord)
+                point = self.draw_point([intersection_point[0], intersection_point[1]])
+                self.canvas.itemconfig(point, tags="track_intersection")
 
-    def update_rotated_coordinates(self, new_positions):
-        """
-        Met à jour les propriétés de position pivotée de la voiture avec la nouvelle position
-        """
-        self.rotated_upper_left_corner = Vector2(new_positions[0][0], new_positions[0][1])
-        self.rotated_upper_right_corner = Vector2(new_positions[1][0], new_positions[1][1])
-        self.rotated_bottom_right_corner = Vector2(new_positions[2][0], new_positions[2][1])
-        self.rotated_bottom_left_corner = Vector2(new_positions[3][0], new_positions[3][1])
-
-    def draw(self):
-        """
-        Fonction permettant d'afficher la position actuelle de la voiture de manière continue
-        """
-        # Efface les précédentes formes
-        self.erase_old_forms()
-
-        center = self.get_center_coordinates()
-
-        # Récupère la nouvelle position pivotée
-        rotated_positions = self.rotate([
-            self.upper_left_corner,
-            self.upper_right_corner,
-            self.bottom_right_corner,
-            self.bottom_left_corner,
-        ], self.angle, (center.x, center.y))
-
-        # Met à jour la position pivotée
-        self.update_rotated_coordinates(rotated_positions)
-        # Met
-
-        # Dessin de la voiture
-        self.car = self.canvas.create_polygon(rotated_positions, outline='green', fill='')
-        self.draw_track_intersection_with_car_points(rotated_positions)
-        self.draw_center()
-        self.draw_direction_arrow()
-        self.draw_radar_lines()
-
-        self.canvas.after(delay, self.draw)
-
-    def draw_track_intersection_with_car_points(self, car_corner_positions):
-        front_car_segment = [car_corner_positions[0][0], car_corner_positions[0][1], car_corner_positions[1][0],
-                             car_corner_positions[1][1]]
-        right_car_segment = [car_corner_positions[1][0], car_corner_positions[1][1], car_corner_positions[2][0],
-                             car_corner_positions[2][1]]
-        back_car_segment = [car_corner_positions[2][0], car_corner_positions[2][1], car_corner_positions[3][0],
-                            car_corner_positions[3][1]]
-        left_car_segment = [car_corner_positions[3][0], car_corner_positions[3][1], car_corner_positions[0][0],
-                            car_corner_positions[0][1]]
-        self.draw_track_intersection_points(front_car_segment, 'yellow')
-        self.draw_track_intersection_points(right_car_segment, 'yellow')
-        self.draw_track_intersection_points(back_car_segment, 'yellow')
-        self.draw_track_intersection_points(left_car_segment, 'yellow')
-
-    def draw_track_intersection_points(self, line_coord, color='red'):
+    def get_track_intersection_point_by_radar_line(self, line_coord):
+        closest_intersection_point = None
         track_segments_ids = list(self.canvas.find_withtag("track_segment"))
         for track_segment_id in track_segments_ids:
             track_segment_coord = self.canvas.coords(track_segment_id)
             intersection_point = get_segments_intersection_point(line_coord, track_segment_coord)
             if intersection_point:
-                point = self.draw_point([intersection_point[0], intersection_point[1]], color)
-                self.canvas.itemconfig(point, tags="track_intersection")
+                if closest_intersection_point is None:
+                    closest_intersection_point = intersection_point
+                else:
+                    closest_intersection_point = self.get_closest_intersection_point_to_center(closest_intersection_point, intersection_point, line_coord)
+        return closest_intersection_point
 
-    def draw_radar_lines(self):
+    def get_closest_intersection_point_to_center(self, closest_intersection_point, intersection_point, line_coord):
+        line_coord_vec = ((line_coord[0], line_coord[1]), (line_coord[2], line_coord[3]))
+        intersect_point_proximity = intersect_point_line((intersection_point[0], intersection_point[1]), line_coord_vec[0], line_coord_vec[1])[1]
+        closest_intersection_point_proximity = intersect_point_line((closest_intersection_point[0], closest_intersection_point[1]), line_coord_vec[0], line_coord_vec[1])[1]
+        if intersect_point_proximity > closest_intersection_point_proximity:
+            return closest_intersection_point
+        elif intersect_point_proximity < closest_intersection_point_proximity:
+            return intersection_point
+        else:
+            return closest_intersection_point
 
-        # une fonction qui prend en paramètre la direction et qui retourne l'equation_line
-        # une fonction qui prend en paramètre le direction et l'equation_line et qui renvoie les coordonnées de la ligne
-        # fonction qui draw la ligne
+    def get_radar_lines(self):
+        radar_directions = [a for a in dir(RadarDirection) if not a.startswith('__')]
+        return list(map(lambda direction: self.get_radar_line_coord_by_direction(direction), radar_directions))
 
-        self.draw_radar_line_by_direction(RadarDirection.CENTER)
-        self.draw_radar_line_by_direction(RadarDirection.LEFT)
-        self.draw_radar_line_by_direction(RadarDirection.RIGHT)
-        self.draw_radar_line_by_direction(RadarDirection.LEFT_DIAGONAL)
-        self.draw_radar_line_by_direction(RadarDirection.RIGHT_DIAGONAL)
-
-        # car_width_coord = self.center.x, self.center.y, \
-        #                   (self.rotated_bottom_right_corner.x + self.rotated_upper_right_corner.x) / 2, \
-        #                   (self.rotated_bottom_right_corner.y + self.rotated_upper_right_corner.y) / 2
-        # car_width_equation_line = get_equation_line_by_segment(*car_width_coord)
-        #
-        # self.draw_center_radar_line(center)
-        # self.draw_left_radar_line(center, car_width_equation_line)
-        # self.draw_right_radar_line(center, car_width_equation_line)
-        # self.draw_right_diagonal_radar_line(center)
-        # self.draw_left_diagonal_radar_line(center)
-
-    def draw_radar_line_by_direction(self, radar_direction):
+    def get_radar_line_coord_by_direction(self, radar_direction):
         equation_line = self.get_equation_line_by_direction(radar_direction)
-        line_coord = self.get_line_coord_by_equation_line_and_direction(equation_line, radar_direction)
-        self.draw_radar_line(line_coord)
+        return self.get_line_coord_by_equation_line_and_direction(equation_line, radar_direction)
 
     def get_equation_line_by_direction(self, radar_direction):
         if radar_direction == RadarDirection.CENTER:
@@ -315,10 +238,125 @@ class Car:
         y = x * equation_line[0] + equation_line[1]
         return self.center.x, self.center.y, x, y
 
+    # =========================== Getters & Setters ===========================
+
+    def get_coordinates_as_list(self):
+        return [
+            [self.upper_left_corner.x, self.upper_left_corner.y],
+            [self.upper_right_corner.x, self.upper_right_corner.y],
+            [self.bottom_right_corner.x, self.bottom_right_corner.y],
+            [self.bottom_left_corner.x, self.bottom_left_corner.y]
+        ]
+
+    def get_center_coordinates(self):
+        return Vector2(
+            (self.upper_left_corner.x + self.bottom_right_corner.x) / 2,
+            (self.upper_left_corner.y + self.bottom_right_corner.y) / 2
+        )
+
+    def update_rotated_coordinates(self, new_positions):
+        """
+        Met à jour les propriétés de position pivotée de la voiture avec la nouvelle position
+        """
+        self.rotated_upper_left_corner = Vector2(new_positions[0][0], new_positions[0][1])
+        self.rotated_upper_right_corner = Vector2(new_positions[1][0], new_positions[1][1])
+        self.rotated_bottom_right_corner = Vector2(new_positions[2][0], new_positions[2][1])
+        self.rotated_bottom_left_corner = Vector2(new_positions[3][0], new_positions[3][1])
+
+    # =========================== Callbacks Functions ===========================
+
+    def up(self, event):
+        self.acceleration -= 1 * dt
+        self.acceleration = max(-self.max_acceleration, min(self.acceleration, self.max_acceleration))
+
+    def down(self, event):
+        self.acceleration += 1 * dt
+        self.acceleration = max(-self.max_acceleration, min(self.acceleration, self.max_acceleration))
+
+    def turn_left(self, event):
+        self.steering += 100
+        self.steering = max(-self.max_steering, min(self.steering, self.max_steering))
+
+    def turn_right(self, event):
+        self.steering -= 100
+        self.steering = max(-self.max_steering, min(self.steering, self.max_steering))
+
+    def stop(self, event):
+        self.stop_car()
+
+    # =========================== Drawing Functions ===========================
+
+    def draw(self):
+        """
+        Fonction permettant d'afficher la position actuelle de la voiture de manière continue
+        """
+        # Efface les précédentes formes
+        self.erase_old_forms()
+
+        center = self.get_center_coordinates()
+
+        # Récupère la nouvelle position pivotée
+        rotated_positions = self.rotate([
+            self.upper_left_corner,
+            self.upper_right_corner,
+            self.bottom_right_corner,
+            self.bottom_left_corner,
+        ], self.angle, (center.x, center.y))
+
+        # Met à jour la position pivotée
+        self.update_rotated_coordinates(rotated_positions)
+        # Met
+
+        # Dessin de la voiture
+        self.car = self.canvas.create_polygon(rotated_positions, outline='green', fill='')
+        self.draw_track_intersection_with_car_points(rotated_positions)
+        self.draw_center()
+        self.draw_direction_arrow()
+
+        # self.draw_radar_lines()
+        self.get_radar_segment()
+
+        # au final, il faudra déporter la logique de récupération des segments radar dans la fonction 'move'
+        # les coordonnées des segments seront enregistrées en tant que propriété
+
+        # et dans la fonction 'draw' -> seulement le dessin des segments et des points
+
+        self.canvas.after(delay, self.draw)
+
+    def draw_track_intersection_with_car_points(self, car_corner_positions):
+        front_car_segment = [car_corner_positions[0][0], car_corner_positions[0][1], car_corner_positions[1][0],
+                             car_corner_positions[1][1]]
+        right_car_segment = [car_corner_positions[1][0], car_corner_positions[1][1], car_corner_positions[2][0],
+                             car_corner_positions[2][1]]
+        back_car_segment = [car_corner_positions[2][0], car_corner_positions[2][1], car_corner_positions[3][0],
+                            car_corner_positions[3][1]]
+        left_car_segment = [car_corner_positions[3][0], car_corner_positions[3][1], car_corner_positions[0][0],
+                            car_corner_positions[0][1]]
+        self.draw_track_intersection_points(front_car_segment, 'yellow')
+        self.draw_track_intersection_points(right_car_segment, 'yellow')
+        self.draw_track_intersection_points(back_car_segment, 'yellow')
+        self.draw_track_intersection_points(left_car_segment, 'yellow')
+
+    def draw_track_intersection_points(self, line_coord, color='red'):
+        track_segments_ids = list(self.canvas.find_withtag("track_segment"))
+        for track_segment_id in track_segments_ids:
+            track_segment_coord = self.canvas.coords(track_segment_id)
+            intersection_point = get_segments_intersection_point(line_coord, track_segment_coord)
+            if intersection_point:
+                point = self.draw_point([intersection_point[0], intersection_point[1]], color)
+                self.canvas.itemconfig(point, tags="track_intersection")
+
+    # TODO DELETE
+    def draw_radar_lines(self):
+        radar_directions = [a for a in dir(RadarDirection) if not a.startswith('__')]
+        for radar_direction in radar_directions:
+            line_coord = self.get_radar_line_coord_by_direction(radar_direction)
+            self.draw_radar_line(line_coord)
+            self.draw_track_intersection_points(line_coord)
+
     def draw_radar_line(self, line_coord):
         line = self.canvas.create_line(*line_coord)
         self.canvas.itemconfig(line, tags="radar_line")
-        self.draw_track_intersection_points(line_coord)
 
     def erase_old_forms(self):
         self.canvas.delete(self.car)
