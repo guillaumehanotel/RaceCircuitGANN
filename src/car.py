@@ -59,6 +59,13 @@ class Car:
         # La propriété car correspond à son polygone dans le canvas
         self.car = None
 
+        # Propriétés pour le mode autonome et le GANN
+        self.is_alive = True
+        self.fitness = 0.0
+        self.distance_traveled = 0.0
+        self.time_alive = 0
+        self.is_autonomous = False
+
     def init_car_position(self, length, width, position_x, position_y):
         """
         Place la voiture à sa position initiale
@@ -75,12 +82,27 @@ class Car:
     def move(self):
         """
         Fonction permettant de mettre à jour la position de la voiture en fonction de sa vélocité et de son accélération
+        Mode manuel : s'appelle récursivement
+        Mode autonome : ne s'appelle pas récursivement (appelé par le trainer)
         """
+        if not self.is_alive:
+            if not self.is_autonomous:
+                self.canvas.after(delay, self.move)
+            return
+
+        # Sauvegarde la position précédente pour calculer la distance
+        prev_center = self.get_center_coordinates()
+
         self.velocity += (0, self.acceleration * dt)
         self.velocity.y = max(-self.max_velocity, min(self.velocity.y, self.max_velocity))
 
+        # Détection de collision avec les bords de la fenêtre
         if self.has_reach_window_limit():
-            self.velocity = self.velocity * -20
+            if self.is_autonomous:
+                self.is_alive = False
+                return
+            else:
+                self.velocity = self.velocity * -20
 
         self.upper_left_corner += self.velocity.rotate(self.angle) * dt
         self.upper_right_corner += self.velocity.rotate(self.angle) * dt
@@ -92,7 +114,19 @@ class Car:
         self.center = self.get_center_coordinates()
         self.angle = self.compute_car_angle()
 
-        self.canvas.after(delay, self.move)
+        # Calcule la distance parcourue
+        if self.is_autonomous and self.is_alive:
+            distance_moved = math.sqrt((self.center.x - prev_center.x)**2 + (self.center.y - prev_center.y)**2)
+            self.distance_traveled += distance_moved
+            self.time_alive += 1
+
+            # Détection de collision avec la piste
+            if self.check_collision_with_track():
+                self.is_alive = False
+
+        # En mode manuel, s'appelle récursivement
+        if not self.is_autonomous:
+            self.canvas.after(delay, self.move)
 
     def compute_car_angle(self):
         if self.steering:
@@ -136,6 +170,10 @@ class Car:
         self.steering = 0
         self.angle = 0
         self.acceleration = 0
+        self.is_alive = True
+        self.fitness = 0.0
+        self.distance_traveled = 0.0
+        self.time_alive = 0
 
     def rotate(self, points, angle, center):
         """
@@ -153,6 +191,70 @@ class Car:
             y_new = x_old * sin_val + y_old * cos_val
             new_points.append([x_new + cx, y_new + cy])
         return new_points
+
+    # =========================== Autonomous Driving ===========================
+
+    def get_radar_distances(self):
+        """
+        Retourne les distances des 5 radars normalisées pour le réseau de neurones
+        Ordre: CENTER, LEFT, LEFT_DIAGONAL, RIGHT, RIGHT_DIAGONAL
+        """
+        distances = []
+        max_distance = 500.0  # Distance max de normalisation
+
+        if len(self.radar_segments) == 5:
+            for segment in self.radar_segments:
+                # Calcule la distance euclidienne
+                distance = math.sqrt((segment[2] - segment[0])**2 + (segment[3] - segment[1])**2)
+                # Normalise entre 0 et 1
+                normalized_distance = min(distance / max_distance, 1.0)
+                distances.append(normalized_distance)
+        else:
+            # Si pas de radars, retourne des valeurs par défaut
+            distances = [1.0, 1.0, 1.0, 1.0, 1.0]
+
+        return distances
+
+    def drive_autonomous(self, steering_output, acceleration_output):
+        """
+        Contrôle la voiture de manière autonome avec les sorties du réseau de neurones
+        steering_output: valeur entre -1 et 1
+        acceleration_output: valeur entre -1 et 1
+        """
+        if not self.is_alive:
+            return
+
+        # Convertit les sorties du NN en commandes de la voiture
+        self.steering = steering_output * self.max_steering
+        self.acceleration = acceleration_output * self.max_acceleration
+
+    def check_collision_with_track(self):
+        """
+        Vérifie si la voiture est en collision avec la piste
+        Retourne True si collision détectée
+        """
+        track_segments_ids = list(self.canvas.find_withtag("track_segment"))
+
+        # Vérifie les 4 segments de la voiture
+        car_segments = [
+            [self.rotated_upper_left_corner.x, self.rotated_upper_left_corner.y,
+             self.rotated_upper_right_corner.x, self.rotated_upper_right_corner.y],
+            [self.rotated_upper_right_corner.x, self.rotated_upper_right_corner.y,
+             self.rotated_bottom_right_corner.x, self.rotated_bottom_right_corner.y],
+            [self.rotated_bottom_right_corner.x, self.rotated_bottom_right_corner.y,
+             self.rotated_bottom_left_corner.x, self.rotated_bottom_left_corner.y],
+            [self.rotated_bottom_left_corner.x, self.rotated_bottom_left_corner.y,
+             self.rotated_upper_left_corner.x, self.rotated_upper_left_corner.y]
+        ]
+
+        for car_segment in car_segments:
+            for track_segment_id in track_segments_ids:
+                track_segment_coord = self.canvas.coords(track_segment_id)
+                intersection_point = get_segments_intersection_point(car_segment, track_segment_coord)
+                if intersection_point:
+                    return True
+
+        return False
 
     # =========================== Radar Lines ===========================
 
