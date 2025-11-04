@@ -4,10 +4,16 @@ from datetime import datetime
 from src.car import Car
 from shapely.geometry import LineString, Point
 import os
+import threading
 
 ROOT_DIR = os.path.abspath(os.curdir)
 saves_dir = ROOT_DIR + '/saves'
+models_dir = ROOT_DIR + '/models'
 now = datetime.now()
+
+# Crée le dossier models s'il n'existe pas
+if not os.path.exists(models_dir):
+    os.makedirs(models_dir)
 
 
 class App:
@@ -23,6 +29,10 @@ class App:
         self.is_drawing_line = False
         self.line_start_x = None
         self.line_start_y = None
+
+        # NEAT Trainer
+        self.trainer = None
+        self.training_thread = None
 
     def setup_window(self):
         width = 800
@@ -72,6 +82,17 @@ class App:
         self.reset_img = PhotoImage(file=ROOT_DIR + "/assets/reset.png")
         self.reset_btn.config(image=self.reset_img, command=self.reset)
         self.reset_btn.pack(side=LEFT)
+
+        # Boutons pour le mode GANN
+        self.train_btn = Button(self.window, text="Train AI", command=self.start_training, bg='#4CAF50', fg='white', font=('Arial', 10, 'bold'))
+        self.train_btn.pack(side=LEFT, padx=5)
+
+        self.test_btn = Button(self.window, text="Test AI", command=self.test_best_model, bg='#2196F3', fg='white', font=('Arial', 10, 'bold'))
+        self.test_btn.pack(side=LEFT, padx=5)
+
+        # Label pour afficher les stats
+        self.stats_label = Label(self.window, text="Generation: 0 | Best: 0.0 | Avg: 0.0", bg='#d9d9d9', font=('Arial', 9))
+        self.stats_label.pack(side=RIGHT, padx=10)
 
     def reset(self):
         self.car.reset()
@@ -162,3 +183,86 @@ class App:
     def erase(self):
         self.canvas.delete("track_segment")
         self.forms = []
+
+    # =========================== GANN Training Methods ===========================
+
+    def start_training(self):
+        """
+        Démarre l'entraînement GANN dans un thread séparé
+        """
+        if self.training_thread and self.training_thread.is_alive():
+            print("Training is already running!")
+            return
+
+        # Vérifie qu'un circuit est chargé
+        if len(self.forms) == 0:
+            print("Please load a circuit first!")
+            return
+
+        # Désactive le contrôle manuel
+        self.window.unbind("<KeyPress-Up>")
+        self.window.unbind("<KeyPress-Down>")
+        self.window.unbind("<KeyPress-Left>")
+        self.window.unbind("<KeyPress-Right>")
+        self.window.unbind("<space>")
+
+        # Initialise le trainer
+        from src.trainer import NEATTrainer
+        config_path = ROOT_DIR + '/config-neat.txt'
+        self.trainer = NEATTrainer(self.canvas, config_path)
+
+        # Démarre l'entraînement dans un thread
+        self.training_thread = threading.Thread(target=self._train_worker)
+        self.training_thread.daemon = True
+        self.training_thread.start()
+
+        print("Training started! This will take a while...")
+
+    def _train_worker(self):
+        """
+        Worker thread pour l'entraînement
+        """
+        try:
+            winner = self.trainer.train(generations=50)
+            print(f"\nTraining completed! Best fitness: {self.trainer.best_fitness:.2f}")
+
+            # Sauvegarde le meilleur modèle
+            self.trainer.save_genome(winner, models_dir + '/best_genome.pkl')
+
+        except Exception as e:
+            print(f"Error during training: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def test_best_model(self):
+        """
+        Teste le meilleur modèle entraîné
+        """
+        best_model_path = models_dir + '/best_genome.pkl'
+
+        if not os.path.exists(best_model_path):
+            print("No trained model found! Please train first.")
+            return
+
+        # Initialise le trainer si nécessaire
+        if self.trainer is None:
+            from src.trainer import NEATTrainer
+            config_path = ROOT_DIR + '/config-neat.txt'
+            self.trainer = NEATTrainer(self.canvas, config_path)
+
+        # Charge et teste le modèle
+        genome = self.trainer.load_genome(best_model_path)
+        print("Testing best model...")
+        fitness = self.trainer.test_genome(genome, visualize=True)
+        print(f"Test completed! Fitness: {fitness:.2f}")
+
+    def update_stats_display(self):
+        """
+        Met à jour l'affichage des statistiques d'entraînement
+        """
+        if self.trainer:
+            gen = self.trainer.generation
+            best = self.trainer.stats['best_fitness_history'][-1] if self.trainer.stats['best_fitness_history'] else 0
+            avg = self.trainer.stats['avg_fitness_history'][-1] if self.trainer.stats['avg_fitness_history'] else 0
+            self.stats_label.config(text=f"Generation: {gen} | Best: {best:.2f} | Avg: {avg:.2f}")
+            self.window.after(1000, self.update_stats_display)  # Update every second
