@@ -206,17 +206,18 @@ class App:
         self.window.unbind("<KeyPress-Right>")
         self.window.unbind("<space>")
 
-        # Initialise le trainer
+        # Initialise le trainer en mode rapide (fast_mode=True)
         from src.trainer import NEATTrainer
         config_path = ROOT_DIR + '/config-neat.txt'
-        self.trainer = NEATTrainer(self.canvas, config_path)
+        self.trainer = NEATTrainer(self.canvas, config_path, fast_mode=True)
 
         # Démarre l'entraînement dans un thread
         self.training_thread = threading.Thread(target=self._train_worker)
         self.training_thread.daemon = True
         self.training_thread.start()
 
-        print("Training started! This will take a while...")
+        print("🚀 Fast Training Mode: Enabled (no visualization, max speed)")
+        print("Training started! Each generation should take ~1-2 seconds...")
 
     def _train_worker(self):
         """
@@ -244,11 +245,11 @@ class App:
             print("No trained model found! Please train first.")
             return
 
-        # Initialise le trainer si nécessaire
+        # Initialise le trainer si nécessaire (en mode lent pour visualisation)
         if self.trainer is None:
             from src.trainer import NEATTrainer
             config_path = ROOT_DIR + '/config-neat.txt'
-            self.trainer = NEATTrainer(self.canvas, config_path)
+            self.trainer = NEATTrainer(self.canvas, config_path, fast_mode=False)
 
         # Charge et teste le modèle
         genome = self.trainer.load_genome(best_model_path)

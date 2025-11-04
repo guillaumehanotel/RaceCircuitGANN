@@ -8,7 +8,7 @@ class NEATTrainer:
     Classe gérant l'entraînement des voitures avec NEAT
     """
 
-    def __init__(self, canvas, config_path):
+    def __init__(self, canvas, config_path, fast_mode=True):
         self.canvas = canvas
         self.config_path = config_path
         self.generation = 0
@@ -18,6 +18,7 @@ class NEATTrainer:
         self.cars = []
         self.genomes = []
         self.networks = []
+        self.fast_mode = fast_mode  # Mode rapide sans visualisation
 
         # Charge la configuration NEAT
         self.config = neat.Config(
@@ -113,67 +114,94 @@ class NEATTrainer:
             ])
             car.get_radar_segment()
 
-        # Simule jusqu'à ce que toutes les voitures soient mortes ou timeout
-        while any(car.is_alive for car in self.cars) and frame_count < max_frames:
-            # Trouve la meilleure voiture vivante pour la visualiser
-            best_alive_car = None
-            best_distance = 0
+        # Mode rapide : pas de visualisation, simulation pure
+        if self.fast_mode:
+            while any(car.is_alive for car in self.cars) and frame_count < max_frames:
+                for i, car in enumerate(self.cars):
+                    if car.is_alive:
+                        # Obtient les entrées du réseau de neurones (distances radar)
+                        inputs = car.get_radar_distances()
 
-            for i, car in enumerate(self.cars):
-                if car.is_alive:
-                    # Obtient les entrées du réseau de neurones (distances radar)
-                    inputs = car.get_radar_distances()
+                        # Obtient les sorties du réseau de neurones
+                        outputs = self.networks[i].activate(inputs)
 
-                    # Obtient les sorties du réseau de neurones
-                    outputs = self.networks[i].activate(inputs)
+                        # Applique les sorties (steering, acceleration)
+                        steering = outputs[0]  # Entre -1 et 1
+                        acceleration = outputs[1]  # Entre -1 et 1
 
-                    # Applique les sorties (steering, acceleration)
-                    steering = outputs[0]  # Entre -1 et 1
-                    acceleration = outputs[1]  # Entre -1 et 1
+                        car.drive_autonomous(steering, acceleration)
 
-                    car.drive_autonomous(steering, acceleration)
+                        # Met à jour la position de la voiture manuellement
+                        car.move()
 
-                    # Met à jour la position de la voiture manuellement
-                    car.move()
+                frame_count += 1
 
-                    # Garde la meilleure voiture pour visualisation
-                    if car.distance_traveled > best_distance:
-                        best_distance = car.distance_traveled
-                        best_alive_car = car
+                # Update canvas très rarement, juste pour garder l'UI responsive
+                if frame_count % 100 == 0:
+                    self.canvas.update()
 
-            # Visualise seulement la meilleure voiture (pour performance)
-            if best_alive_car and frame_count % 5 == 0:  # Update visuel tous les 5 frames
-                self.canvas.delete("training_car")
-                self.canvas.delete("training_radar")
+        # Mode lent : avec visualisation de la meilleure voiture
+        else:
+            while any(car.is_alive for car in self.cars) and frame_count < max_frames:
+                # Trouve la meilleure voiture vivante pour la visualiser
+                best_alive_car = None
+                best_distance = 0
 
-                # Dessine la meilleure voiture
-                rotated_pos = best_alive_car.rotate([
-                    best_alive_car.upper_left_corner,
-                    best_alive_car.upper_right_corner,
-                    best_alive_car.bottom_right_corner,
-                    best_alive_car.bottom_left_corner,
-                ], best_alive_car.angle, (best_alive_car.center.x, best_alive_car.center.y))
+                for i, car in enumerate(self.cars):
+                    if car.is_alive:
+                        # Obtient les entrées du réseau de neurones (distances radar)
+                        inputs = car.get_radar_distances()
 
-                car_poly = self.canvas.create_polygon(rotated_pos, outline='green', fill='', width=2)
-                self.canvas.itemconfig(car_poly, tags="training_car")
+                        # Obtient les sorties du réseau de neurones
+                        outputs = self.networks[i].activate(inputs)
 
-                # Dessine les radars
-                for segment in best_alive_car.radar_segments:
-                    line = self.canvas.create_line(*segment, fill='cyan', width=1)
-                    self.canvas.itemconfig(line, tags="training_radar")
+                        # Applique les sorties (steering, acceleration)
+                        steering = outputs[0]  # Entre -1 et 1
+                        acceleration = outputs[1]  # Entre -1 et 1
 
-            # Met à jour l'interface (obligatoire pour Tkinter)
-            if frame_count % 2 == 0:  # Update canvas tous les 2 frames
-                self.canvas.update()
+                        car.drive_autonomous(steering, acceleration)
 
-            frame_count += 1
+                        # Met à jour la position de la voiture manuellement
+                        car.move()
 
-            # Petit délai pour éviter de surcharger le CPU
-            time.sleep(0.001)
+                        # Garde la meilleure voiture pour visualisation
+                        if car.distance_traveled > best_distance:
+                            best_distance = car.distance_traveled
+                            best_alive_car = car
 
-        # Nettoie l'affichage
-        self.canvas.delete("training_car")
-        self.canvas.delete("training_radar")
+                # Visualise seulement la meilleure voiture (pour performance)
+                if best_alive_car and frame_count % 5 == 0:  # Update visuel tous les 5 frames
+                    self.canvas.delete("training_car")
+                    self.canvas.delete("training_radar")
+
+                    # Dessine la meilleure voiture
+                    rotated_pos = best_alive_car.rotate([
+                        best_alive_car.upper_left_corner,
+                        best_alive_car.upper_right_corner,
+                        best_alive_car.bottom_right_corner,
+                        best_alive_car.bottom_left_corner,
+                    ], best_alive_car.angle, (best_alive_car.center.x, best_alive_car.center.y))
+
+                    car_poly = self.canvas.create_polygon(rotated_pos, outline='green', fill='', width=2)
+                    self.canvas.itemconfig(car_poly, tags="training_car")
+
+                    # Dessine les radars
+                    for segment in best_alive_car.radar_segments:
+                        line = self.canvas.create_line(*segment, fill='cyan', width=1)
+                        self.canvas.itemconfig(line, tags="training_radar")
+
+                # Met à jour l'interface (obligatoire pour Tkinter)
+                if frame_count % 2 == 0:  # Update canvas tous les 2 frames
+                    self.canvas.update()
+
+                frame_count += 1
+
+                # Petit délai pour éviter de surcharger le CPU
+                time.sleep(0.001)
+
+            # Nettoie l'affichage
+            self.canvas.delete("training_car")
+            self.canvas.delete("training_radar")
 
         # Calcule le fitness de chaque voiture
         for i, car in enumerate(self.cars):
