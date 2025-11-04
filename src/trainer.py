@@ -42,6 +42,9 @@ class NEATTrainer:
         self.generation += 1
         generation_start_time = time.time()
 
+        # Efface toutes les voitures précédentes du canvas
+        self.canvas.delete("training_car")
+
         # Crée les réseaux de neurones et les voitures pour chaque génome
         self.genomes = []
         self.networks = []
@@ -57,6 +60,14 @@ class NEATTrainer:
             from src.car import Car
             car = Car(self.canvas)
             car.is_autonomous = True
+            # Initialise les radars dès le départ
+            car.update_rotated_coordinates([
+                [car.upper_left_corner.x, car.upper_left_corner.y],
+                [car.upper_right_corner.x, car.upper_right_corner.y],
+                [car.bottom_right_corner.x, car.bottom_right_corner.y],
+                [car.bottom_left_corner.x, car.bottom_left_corner.y]
+            ])
+            car.get_radar_segment()
             self.cars.append(car)
 
         # Lance la simulation pour cette génération
@@ -93,9 +104,21 @@ class NEATTrainer:
         # Réinitialise toutes les voitures
         for car in self.cars:
             car.reset()
+            # Réinitialise les radars après reset
+            car.update_rotated_coordinates([
+                [car.upper_left_corner.x, car.upper_left_corner.y],
+                [car.upper_right_corner.x, car.upper_right_corner.y],
+                [car.bottom_right_corner.x, car.bottom_right_corner.y],
+                [car.bottom_left_corner.x, car.bottom_left_corner.y]
+            ])
+            car.get_radar_segment()
 
         # Simule jusqu'à ce que toutes les voitures soient mortes ou timeout
         while any(car.is_alive for car in self.cars) and frame_count < max_frames:
+            # Trouve la meilleure voiture vivante pour la visualiser
+            best_alive_car = None
+            best_distance = 0
+
             for i, car in enumerate(self.cars):
                 if car.is_alive:
                     # Obtient les entrées du réseau de neurones (distances radar)
@@ -113,12 +136,44 @@ class NEATTrainer:
                     # Met à jour la position de la voiture manuellement
                     car.move()
 
+                    # Garde la meilleure voiture pour visualisation
+                    if car.distance_traveled > best_distance:
+                        best_distance = car.distance_traveled
+                        best_alive_car = car
+
+            # Visualise seulement la meilleure voiture (pour performance)
+            if best_alive_car and frame_count % 5 == 0:  # Update visuel tous les 5 frames
+                self.canvas.delete("training_car")
+                self.canvas.delete("training_radar")
+
+                # Dessine la meilleure voiture
+                rotated_pos = best_alive_car.rotate([
+                    best_alive_car.upper_left_corner,
+                    best_alive_car.upper_right_corner,
+                    best_alive_car.bottom_right_corner,
+                    best_alive_car.bottom_left_corner,
+                ], best_alive_car.angle, (best_alive_car.center.x, best_alive_car.center.y))
+
+                car_poly = self.canvas.create_polygon(rotated_pos, outline='green', fill='', width=2)
+                self.canvas.itemconfig(car_poly, tags="training_car")
+
+                # Dessine les radars
+                for segment in best_alive_car.radar_segments:
+                    line = self.canvas.create_line(*segment, fill='cyan', width=1)
+                    self.canvas.itemconfig(line, tags="training_radar")
+
             # Met à jour l'interface (obligatoire pour Tkinter)
-            self.canvas.update()
+            if frame_count % 2 == 0:  # Update canvas tous les 2 frames
+                self.canvas.update()
+
             frame_count += 1
 
             # Petit délai pour éviter de surcharger le CPU
             time.sleep(0.001)
+
+        # Nettoie l'affichage
+        self.canvas.delete("training_car")
+        self.canvas.delete("training_radar")
 
         # Calcule le fitness de chaque voiture
         for i, car in enumerate(self.cars):
@@ -214,6 +269,15 @@ class NEATTrainer:
         car.is_autonomous = True
         car.reset()
 
+        # Initialise les radars
+        car.update_rotated_coordinates([
+            [car.upper_left_corner.x, car.upper_left_corner.y],
+            [car.upper_right_corner.x, car.upper_right_corner.y],
+            [car.bottom_right_corner.x, car.bottom_right_corner.y],
+            [car.bottom_left_corner.x, car.bottom_left_corner.y]
+        ])
+        car.get_radar_segment()
+
         # Lance la simulation
         max_frames = 2000
         frame_count = 0
@@ -231,12 +295,37 @@ class NEATTrainer:
             # Met à jour la position de la voiture
             car.move()
 
-            # Met à jour l'interface
+            # Visualise la voiture
             if visualize:
+                self.canvas.delete("test_car")
+                self.canvas.delete("test_radar")
+
+                # Dessine la voiture
+                rotated_pos = car.rotate([
+                    car.upper_left_corner,
+                    car.upper_right_corner,
+                    car.bottom_right_corner,
+                    car.bottom_left_corner,
+                ], car.angle, (car.center.x, car.center.y))
+
+                car_poly = self.canvas.create_polygon(rotated_pos, outline='blue', fill='', width=2)
+                self.canvas.itemconfig(car_poly, tags="test_car")
+
+                # Dessine les radars
+                for segment in car.radar_segments:
+                    line = self.canvas.create_line(*segment, fill='yellow', width=1)
+                    self.canvas.itemconfig(line, tags="test_radar")
+
+                # Met à jour l'interface
                 self.canvas.update()
                 time.sleep(0.02)  # 50 FPS
 
             frame_count += 1
+
+        # Nettoie l'affichage
+        if visualize:
+            self.canvas.delete("test_car")
+            self.canvas.delete("test_radar")
 
         fitness = self.calculate_fitness(car, frame_count)
         print(f"Test finished. Fitness: {fitness:.2f}, Distance: {car.distance_traveled:.2f}, "

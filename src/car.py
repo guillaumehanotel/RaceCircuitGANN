@@ -96,6 +96,26 @@ class Car:
         self.velocity += (0, self.acceleration * dt)
         self.velocity.y = max(-self.max_velocity, min(self.velocity.y, self.max_velocity))
 
+        self.upper_left_corner += self.velocity.rotate(self.angle) * dt
+        self.upper_right_corner += self.velocity.rotate(self.angle) * dt
+        self.bottom_left_corner += self.velocity.rotate(self.angle) * dt
+        self.bottom_right_corner += self.velocity.rotate(self.angle) * dt
+
+        self.center = self.get_center_coordinates()
+        self.angle = self.compute_car_angle()
+
+        # Met à jour les coordonnées rotées (nécessaire pour radars et collisions)
+        rotated_positions = self.rotate([
+            self.upper_left_corner,
+            self.upper_right_corner,
+            self.bottom_right_corner,
+            self.bottom_left_corner,
+        ], self.angle, (self.center.x, self.center.y))
+        self.update_rotated_coordinates(rotated_positions)
+
+        # Calcule les segments radar après mise à jour des positions
+        self.get_radar_segment()
+
         # Détection de collision avec les bords de la fenêtre
         if self.has_reach_window_limit():
             if self.is_autonomous:
@@ -103,16 +123,6 @@ class Car:
                 return
             else:
                 self.velocity = self.velocity * -20
-
-        self.upper_left_corner += self.velocity.rotate(self.angle) * dt
-        self.upper_right_corner += self.velocity.rotate(self.angle) * dt
-        self.bottom_left_corner += self.velocity.rotate(self.angle) * dt
-        self.bottom_right_corner += self.velocity.rotate(self.angle) * dt
-
-        self.get_radar_segment()
-
-        self.center = self.get_center_coordinates()
-        self.angle = self.compute_car_angle()
 
         # Calcule la distance parcourue
         if self.is_autonomous and self.is_alive:
